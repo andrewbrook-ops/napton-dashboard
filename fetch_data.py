@@ -1,48 +1,424 @@
-name: Refresh Dashboard
+#!/usr/bin/env python3
+"""
+Napton on the Hill – dashboard generator.
+Fetches live data and writes index.html.
+Falls back to data_cache.json if any source fails.
+"""
  
-on:
-  schedule:
-    # Every 3 hours
-    - cron: '0 */3 * * *'
-  workflow_dispatch:
-    # Allows manual trigger from the Actions tab
+import json, os, re
+from datetime import datetime
+from urllib.request import urlopen, Request
+from urllib.error import URLError
  
-permissions:
-  contents: write
+CACHE_FILE = "data_cache.json"
+BASE_URL   = "https://napton-pc.gov.uk"
+HEADERS    = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0",
+    "Accept":     "text/html,application/json,*/*;q=0.9",
+}
  
-jobs:
-  refresh:
-    runs-on: ubuntu-latest
+# ── STATIC: pubs never change ────────────────────────────────────
+PUBS = [
+    {"name":"The Folly at Napton","color":"#4A7E99",
+     "desc":"A canalside pub with real fires and a warm welcome. Food served daily, dog-friendly, and views over the Oxford Canal.",
+     "web":"http://follyatnapton.co.uk/","fb":"https://www.facebook.com/thefollyatnapton/","ig":"https://www.instagram.com/thefollynapton/"},
+    {"name":"The Kings Head","color":"#8B6014",
+     "desc":"A Hook Norton house at the heart of the village. Traditional ales, quiz nights, and proper home cooking.",
+     "web":"https://www.thekingsheadnapton.com/","fb":"https://www.facebook.com/thekingsheadnapton/","ig":None},
+    {"name":"Napton Cidery","color":"#568A44",
+     "desc":"Craft cider pressed from Napton's own orchards. Farm shop, tastings, and seasonal events throughout the year.",
+     "web":"https://www.naptoncidery.co.uk/","fb":"https://www.facebook.com/naptoncidery/","ig":"https://www.instagram.com/naptoncidery/"},
+    {"name":"The Victory Club","color":"#8B3030",
+     "desc":"The village social club. Sport on the telly, live events, darts, and a community spirit you can't bottle.",
+     "web":None,"fb":"https://www.facebook.com/napton.victoryclub/","ig":None},
+]
  
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+# ── HELPERS ──────────────────────────────────────────────────────
+def fetch(url, timeout=20):
+    req = Request(url, headers=HEADERS)
+    with urlopen(req, timeout=timeout) as r:
+        return r.read().decode("utf-8", errors="replace")
  
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+def load_cache():
+    if os.path.exists(CACHE_FILE):
+        with open(CACHE_FILE) as f:
+            return json.load(f)
+    return {}
  
-      - name: Install dependencies
-        run: pip install beautifulsoup4
+def save_cache(data):
+    with open(CACHE_FILE, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
  
-      - name: Restore cached data (so fallback works on scrape failures)
-        uses: actions/cache@v4
-        with:
-          path: data_cache.json
-          key: napton-data-cache-${{ github.run_id }}
-          restore-keys: |
-            napton-data-cache-
+def slug(text):
+    return re.sub(r"[^a-z0-9]+", "-", text.lower())[:30].strip("-")
  
-      - name: Fetch data and generate index.html
-        run: python fetch_data.py
+# ── WEATHER ──────────────────────────────────────────────────────
+ICONS = {113:"☀️",116:"🌤️",119:"☁️",122:"☁️",143:"🌫️",248:"🌫️",260:"🌫️"}
  
-      - name: Commit and push updated site
-        run: |
-          git config user.name  "Napton Bot"
-          git config user.email "bot@napton-dashboard"
-          git add index.html data_cache.json
-          # Only commit if something changed
-          git diff --cached --quiet || git commit -m "Refresh dashboard $(date -u +'%Y-%m-%d %H:%M UTC')"
-          git push
+def weather_icon(code):
+    c = int(code)
+    if c in ICONS: return ICONS[c]
+    if c in (200,386,389,392,395): return "⛈️"
+    if 320 <= c <= 395: return "🌨️"
+    if c in (176,263,266,293,296,353): return "🌦️"
+    return "🌧️"
  
+def get_weather():
+    data = json.loads(fetch("https://wttr.in/Napton-on-the-Hill,Warwickshire?format=j1"))
+    cur  = data["current_condition"][0]
+    forecast = []
+    for day in data["weather"][:5]:
+        mid = day["hourly"][4]
+        dt  = datetime.strptime(day["date"], "%Y-%m-%d")
+        forecast.append({
+            "day":  dt.strftime("%a"),
+            "high": int(day["maxtempC"]),
+            "low":  int(day["mintempC"]),
+            "icon": weather_icon(mid["weatherCode"]),
+            "rain": int(mid.get("chanceofrain", 0)),
+        })
+    return {
+        "current": {
+            "temp":      int(cur["temp_C"]),
+            "feelsLike": int(cur["FeelsLikeC"]),
+            "desc":      cur["weatherDesc"][0]["value"],
+            "wind":      f"{cur['winddir16Point']} {cur['windspeedKmph']} km/h",
+            "humidity":  int(cur["humidity"]),
+            "icon":      weather_icon(cur["weatherCode"]),
+        },
+        "forecast": forecast,
+    }
+ 
+# ── PROPERTIES ───────────────────────────────────────────────────
+def get_properties():
+    from bs4 import BeautifulSoup
+    html  = fetch("https://www.rightmove.co.uk/property-for-sale/Napton.html")
+    soup  = BeautifulSoup(html, "html.parser")
+    props = []
+ 
+    for card in soup.select('[data-test="propertyCard"], .l-searchResult'):
+        try:
+            addr  = (card.select_one('[data-test="address"]') or
+                     card.select_one('.propertyCard-address'))
+            price = (card.select_one('[data-test="price"]') or
+                     card.select_one('.propertyCard-priceValue'))
+            link  = card.select_one('a[href*="/properties/"]')
+            if not (addr and price and link): continue
+ 
+            href   = link["href"]
+            pid    = re.search(r"/properties/(\d+)", href)
+            if not pid: continue
+ 
+            beds_el = card.select_one('[data-test="beds"]')
+            beds_n  = int(re.search(r"\d+", beds_el.get_text()).group()) if beds_el else 0
+ 
+            raw_type = ""
+            for t in ["Detached","Semi-Detached","Terraced","Cottage","Flat","Bungalow"]:
+                if t.lower() in html[html.find(href)-200:html.find(href)+500].lower():
+                    raw_type = t; break
+ 
+            price_str = price.get_text(strip=True).replace("\xa3","£").replace(",","")
+            price_val = int(re.sub(r"[^0-9]","", price_str)) if re.search(r"\d", price_str) else 0
+ 
+            props.append({
+                "id":      f"rm-{pid.group(1)}",
+                "address": addr.get_text(strip=True),
+                "price":   price.get_text(strip=True).replace("\xa3","£"),
+                "beds":    beds_n,
+                "type":    raw_type or "Property",
+                "url":     f"https://www.rightmove.co.uk/properties/{pid.group(1)}",
+                "_sort":   price_val,
+            })
+        except Exception:
+            continue
+ 
+    if not props:
+        return None
+    for p in props: p.pop("_sort", None)
+    return sorted(props, key=lambda p: int(re.sub(r"[^0-9]","",p["price"]) or "0"))
+ 
+# ── PLANNING ─────────────────────────────────────────────────────
+STATUS_MAP = [
+    ("Permission with Conditions", "sg"),
+    ("Pending Consideration",      "sa"),
+    ("Prior Approval Refused",     "sr"),
+    ("Lawful Dev",                 "sr"),
+    ("Refused",                    "sr"),
+    ("Amendment Approved",         "sg"),
+    ("Approved",                   "sg"),
+    ("Comments Sent",              "sb"),
+]
+ 
+def get_planning():
+    from bs4 import BeautifulSoup
+    html = fetch(f"{BASE_URL}/planning-applications")
+    soup = BeautifulSoup(html, "html.parser")
+    apps = []
+ 
+    # Try table rows first, then list items, then paragraphs
+    candidates = (soup.select("table tr")[1:]
+                  or soup.select("ul.planning li")
+                  or soup.select(".planning-application")
+                  or soup.select("article"))
+ 
+    for row in candidates:
+        text = row.get_text(" ", strip=True)
+        if len(text) < 15: continue
+        dates = re.findall(r"\d{1,2}/\d{2}/\d{4}", text)
+        if not dates: continue
+ 
+        status = "Pending"
+        for label, _ in STATUS_MAP:
+            if label.lower() in text.lower():
+                status = label; break
+ 
+        cells  = row.select("td, li")
+        addr   = cells[0].get_text(strip=True) if cells else re.split(r"\s{2,}", text)[0]
+        addr   = addr[:90]
+ 
+        try:
+            dt       = datetime.strptime(dates[0], "%d/%m/%Y")
+            received = dt.strftime("%-d %b %Y")
+        except Exception:
+            received = dates[0]
+ 
+        apps.append({
+            "id":       f"p-{slug(addr)}",
+            "address":  addr,
+            "status":   status,
+            "received": received,
+            "url":      f"{BASE_URL}/planning-applications",
+        })
+ 
+    return apps or None
+ 
+# ── PARISH NEWS ──────────────────────────────────────────────────
+def get_news():
+    from bs4 import BeautifulSoup
+    html = fetch(f"{BASE_URL}/")
+    soup = BeautifulSoup(html, "html.parser")
+    items = []
+ 
+    for el in (soup.select("article.post")
+               or soup.select(".news-item")
+               or soup.select("article"))[:8]:
+        title_el = el.select_one("h2,h3,h4,.entry-title")
+        body_el  = el.select_one("p,.entry-content,.excerpt")
+        date_el  = el.select_one("time,.date,[class*='date']")
+        link_el  = el.select_one("a")
+ 
+        title = title_el.get_text(strip=True) if title_el else None
+        if not title or len(title) < 5: continue
+ 
+        body  = (body_el.get_text(strip=True) if body_el else "")[:200]
+        body  = body + ("…" if len(body) == 200 else "")
+ 
+        raw_d = (date_el.get("datetime","") or
+                 (date_el.get_text(strip=True) if date_el else "")) if date_el else ""
+        try:
+            date_str = datetime.fromisoformat(raw_d[:10]).strftime("%-d %b %Y")
+        except Exception:
+            date_str = datetime.now().strftime("%b %Y")
+ 
+        href = link_el["href"] if link_el else "/"
+        url  = href if href.startswith("http") else f"{BASE_URL}{href}"
+ 
+        items.append({
+            "id":    f"news-{slug(title)}",
+            "title": title,
+            "date":  date_str,
+            "body":  body or "Visit napton-pc.gov.uk for full details.",
+            "url":   url,
+        })
+ 
+    return items[:6] or None
+ 
+# ── HTML TEMPLATE ────────────────────────────────────────────────
+def generate_html(data):
+    data_json = json.dumps(data, ensure_ascii=False, indent=2)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Napton on the Hill</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap">
+<style>
+:root{{--bg:#EEF2EC;--surface:#FFF;--surface-2:#E6EBE3;--border:#CDD6C8;--text:#141B14;--text-muted:#4B5E48;--text-faint:#7A8C76;--header-bg:#1B3824;--header-text:#E8F0E5;--header-muted:rgba(232,240,229,.55);--accent:#B0721A;--accent-bg:#F2E6D0;--st-green:#29643D;--st-green-bg:#D6ECDF;--st-red:#A43028;--st-red-bg:#F5DCDA;--st-amber:#875A10;--st-amber-bg:#F0E0C0;--st-blue:#2A4C7C;--st-blue-bg:#D8E8F8;--new:#C03828;--r:8px;--sh:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04)}}
+@media(prefers-color-scheme:dark){{:root:not([data-theme=light]){{--bg:#111811;--surface:#192419;--surface-2:#1F2E1F;--border:#2A3C2A;--text:#E2EEE0;--text-muted:#84A080;--text-faint:#566E54;--header-bg:#0D1A0D;--header-text:#E2EEE0;--header-muted:rgba(226,238,224,.48);--accent:#C48428;--accent-bg:#382C10;--st-green:#48966A;--st-green-bg:#193024;--st-red:#C04840;--st-red-bg:#381818;--st-amber:#B89C38;--st-amber-bg:#382C10;--st-blue:#5880BE;--st-blue-bg:#182038;--new:#D84838;--sh:0 1px 4px rgba(0,0,0,.25)}}}}
+:root[data-theme=dark]{{--bg:#111811;--surface:#192419;--surface-2:#1F2E1F;--border:#2A3C2A;--text:#E2EEE0;--text-muted:#84A080;--text-faint:#566E54;--header-bg:#0D1A0D;--header-text:#E2EEE0;--header-muted:rgba(226,238,224,.48);--accent:#C48428;--accent-bg:#382C10;--st-green:#48966A;--st-green-bg:#193024;--st-red:#C04840;--st-red-bg:#381818;--st-amber:#B89C38;--st-amber-bg:#382C10;--st-blue:#5880BE;--st-blue-bg:#182038;--new:#D84838;--sh:0 1px 4px rgba(0,0,0,.25)}}
+*,*::before,*::after{{box-sizing:border-box;margin:0;padding:0}}html{{scroll-behavior:smooth}}
+body{{background:var(--bg);color:var(--text);font-family:'Outfit',system-ui,sans-serif;font-size:15px;line-height:1.5;min-height:100vh}}a{{color:inherit}}
+.site-header{{background:var(--header-bg);background-image:radial-gradient(ellipse 130% 70% at 50% 150%,rgba(55,110,65,.3) 0%,transparent 65%),radial-gradient(ellipse 80% 60% at 15% 140%,rgba(40,90,50,.2) 0%,transparent 70%);color:var(--header-text);padding:26px 32px 22px;display:flex;justify-content:space-between;align-items:flex-end;gap:24px}}
+.header-brand h1{{font-family:'Cormorant Garamond',Georgia,serif;font-size:clamp(26px,5vw,44px);font-weight:600;letter-spacing:-.01em;line-height:1;color:var(--header-text)}}
+.header-brand .sub{{font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-size:13.5px;color:var(--header-muted);margin-top:5px;letter-spacing:.03em}}
+.header-meta{{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0}}
+.header-updated{{font-size:11px;color:var(--header-muted)}}
+.theme-btn{{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:var(--header-text);cursor:pointer;padding:4px 11px;border-radius:20px;font-family:'Outfit',sans-serif;font-size:11.5px;transition:background .15s}}
+.theme-btn:hover{{background:rgba(255,255,255,.14)}}.theme-btn:focus-visible{{outline:2px solid var(--accent);outline-offset:2px}}
+.site-nav{{background:var(--surface);border-bottom:1px solid var(--border);padding:0 32px;display:flex;overflow-x:auto;scrollbar-width:none}}
+.site-nav::-webkit-scrollbar{{display:none}}
+.site-nav a{{color:var(--text-muted);text-decoration:none;font-size:13px;font-weight:500;padding:11px 15px;border-bottom:2px solid transparent;white-space:nowrap;transition:color .13s,border-color .13s}}
+.site-nav a:hover{{color:var(--text);border-bottom-color:var(--accent)}}.site-nav a:focus-visible{{outline:2px solid var(--accent);outline-offset:-2px}}
+.main{{max-width:1200px;margin:0 auto;padding:0 28px 56px}}.section{{margin-top:38px}}
+.section-header{{display:flex;align-items:baseline;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border);padding-bottom:9px;margin-bottom:16px}}
+.section-title{{font-family:'Cormorant Garamond',serif;font-size:21px;font-weight:600;letter-spacing:-.01em;color:var(--text)}}
+.section-sub{{font-size:12px;color:var(--text-faint);font-weight:400}}
+.ext-link{{font-size:12px;color:var(--accent);text-decoration:none;font-weight:500;white-space:nowrap}}.ext-link:hover{{text-decoration:underline}}
+.weather-card{{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px 28px;display:grid;grid-template-columns:auto 1fr;gap:28px;box-shadow:var(--sh)}}
+.weather-now{{display:flex;align-items:center;gap:18px}}.weather-icon-big{{font-size:52px;line-height:1}}
+.weather-temp{{font-family:'Cormorant Garamond',serif;font-size:58px;font-weight:400;line-height:1;letter-spacing:-.02em}}
+.weather-temp sup{{font-size:22px;vertical-align:super;font-weight:300}}
+.weather-label{{font-size:15px;font-weight:500;color:var(--text);margin-top:3px}}.weather-detail{{font-size:11.5px;color:var(--text-muted);margin-top:3px}}
+.weather-forecast{{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;align-content:center}}
+.fc-day{{background:var(--surface-2);border-radius:6px;padding:10px 6px 8px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px}}
+.fc-name{{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)}}.fc-ico{{font-size:20px}}
+.fc-temps{{font-size:12px;font-variant-numeric:tabular-nums}}.fc-hi{{font-weight:600;color:var(--text)}}.fc-lo{{color:var(--text-faint)}}
+.fc-rain{{font-size:10px;color:var(--st-blue);font-weight:500;margin-top:1px}}
+.two-col{{display:grid;grid-template-columns:1fr 1fr;gap:32px}}
+.row-list{{background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;gap:1px;box-shadow:var(--sh)}}
+.row-item{{background:var(--surface);padding:11px 14px;display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit;transition:background .12s}}
+.row-item:hover{{background:var(--surface-2)}}.row-item:focus-visible{{outline:2px solid var(--accent);outline-offset:-2px}}
+.row-main{{flex:1;min-width:0}}.row-primary{{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+.row-secondary{{font-size:11px;color:var(--text-muted);margin-top:2px}}
+.prop-price{{font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text);white-space:nowrap;flex-shrink:0}}
+.status{{font-size:9.5px;font-weight:600;padding:2px 7px;border-radius:10px;white-space:nowrap;text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}}
+.sg{{background:var(--st-green-bg);color:var(--st-green)}}.sr{{background:var(--st-red-bg);color:var(--st-red)}}.sa{{background:var(--st-amber-bg);color:var(--st-amber)}}.sb{{background:var(--st-blue-bg);color:var(--st-blue)}}
+.new-badge{{background:var(--new);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:8px;text-transform:uppercase;letter-spacing:.08em;flex-shrink:0}}
+.news-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}}
+.news-card{{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:5px;box-shadow:var(--sh);transition:background .12s}}
+.news-card:hover{{background:var(--surface-2)}}.news-card:focus-visible{{outline:2px solid var(--accent);outline-offset:2px}}
+.news-date{{font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.07em}}
+.news-title{{font-size:13.5px;font-weight:600;color:var(--text);text-wrap:balance}}.news-body{{font-size:12.5px;color:var(--text-muted);line-height:1.45;margin-top:2px}}
+.pubs-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(224px,1fr));gap:16px}}
+.pub-card{{background:var(--surface);border:1px solid var(--border);border-left-width:3px;border-radius:var(--r);padding:18px 18px 16px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--sh)}}
+.pub-name{{font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;color:var(--text);text-wrap:balance;line-height:1.15}}
+.pub-desc{{font-size:12px;color:var(--text-muted);line-height:1.5;flex:1}}.pub-links{{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}}
+.pub-link{{font-size:11px;font-weight:500;padding:4px 10px;border-radius:4px;text-decoration:none;border:1px solid var(--border);color:var(--text-muted);background:var(--surface-2);transition:background .12s,color .12s,border-color .12s}}
+.pub-link:hover{{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}}.pub-link:focus-visible{{outline:2px solid var(--accent);outline-offset:2px}}
+.site-footer{{border-top:1px solid var(--border);padding:18px 32px;font-size:11px;color:var(--text-faint);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-top:52px}}
+.site-footer a{{color:var(--text-faint);text-decoration:none}}.site-footer a:hover{{color:var(--text-muted);text-decoration:underline}}
+@media(max-width:820px){{.two-col{{grid-template-columns:1fr}}.weather-card{{grid-template-columns:1fr}}}}
+@media(max-width:600px){{.site-header{{padding:18px 18px 16px;flex-wrap:wrap}}.site-nav{{padding:0 16px}}.main{{padding:0 16px 48px}}.site-footer{{padding:16px 18px;flex-direction:column;align-items:flex-start}}}}
+@media(prefers-reduced-motion:reduce){{*,*::before,*::after{{transition-duration:.01ms!important}}}}
+</style>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-brand">
+    <h1>Napton on the Hill</h1>
+    <p class="sub">Warwickshire &middot; CV47 &middot; Est. Domesday, 1086</p>
+  </div>
+  <div class="header-meta">
+    <button class="theme-btn" id="theme-btn" onclick="toggleTheme()">&#9790; Dark</button>
+    <span class="header-updated" id="last-updated">&mdash;</span>
+  </div>
+</header>
+<nav class="site-nav" aria-label="Sections">
+  <a href="#weather">Weather</a>
+  <a href="#homes">Homes</a>
+  <a href="#planning">Planning</a>
+  <a href="#council">Council</a>
+  <a href="#pubs">Pubs</a>
+</nav>
+<main class="main">
+  <section class="section" id="weather">
+    <div class="section-header">
+      <h2 class="section-title">Weather</h2>
+      <span class="section-sub">Napton on the Hill &middot; CV47</span>
+    </div>
+    <div class="weather-card" id="weather-card"></div>
+  </section>
+  <div class="two-col">
+    <section class="section" id="homes">
+      <div class="section-header">
+        <h2 class="section-title">Homes for Sale <span class="section-sub" id="homes-count"></span></h2>
+        <a href="https://www.rightmove.co.uk/property-for-sale/Napton.html" target="_blank" rel="noopener" class="ext-link">Rightmove &rarr;</a>
+      </div>
+      <div class="row-list" id="properties-list"></div>
+    </section>
+    <section class="section" id="planning">
+      <div class="section-header">
+        <h2 class="section-title">Planning <span class="section-sub" id="planning-count"></span></h2>
+        <a href="https://napton-pc.gov.uk/planning-applications" target="_blank" rel="noopener" class="ext-link">Full list &rarr;</a>
+      </div>
+      <div class="row-list" id="planning-list"></div>
+    </section>
+  </div>
+  <section class="section" id="council">
+    <div class="section-header">
+      <h2 class="section-title">Parish Council</h2>
+      <a href="https://napton-pc.gov.uk/" target="_blank" rel="noopener" class="ext-link">napton-pc.gov.uk &rarr;</a>
+    </div>
+    <div class="news-grid" id="news-grid"></div>
+  </section>
+  <section class="section" id="pubs">
+    <div class="section-header"><h2 class="section-title">Pubs &amp; Places</h2></div>
+    <div class="pubs-grid" id="pubs-grid"></div>
+  </section>
+</main>
+<footer class="site-footer">
+  <span>Sources: <a href="https://www.rightmove.co.uk/property-for-sale/Napton.html" target="_blank" rel="noopener">Rightmove</a> &middot; <a href="https://napton-pc.gov.uk/planning-applications" target="_blank" rel="noopener">Napton Parish Council</a> &middot; <a href="https://wttr.in" target="_blank" rel="noopener">wttr.in</a></span>
+  <span>Refreshed automatically every 3 hours</span>
+</footer>
+<script>
+const DATA = {data_json};
+function initNewItems(){{const K='napton_seen_v2';let s=null;try{{s=JSON.parse(localStorage.getItem(K))}}catch(e){{}}const ids=[...DATA.properties.map(p=>p.id),...DATA.planning.map(p=>p.id),...DATA.news.map(n=>n.id)];if(!s){{try{{localStorage.setItem(K,JSON.stringify(ids))}}catch(e){{}}return new Set()}}const ss=new Set(s),ns=new Set(ids.filter(i=>!ss.has(i)));try{{localStorage.setItem(K,JSON.stringify([...new Set([...s,...ids])]))}}catch(e){{}}return ns}}
+function stClass(s){{const l=s.toLowerCase();if(l.includes('refused'))return'sr';if(l.includes('pending'))return'sa';if(l.includes('permission')||l.includes('approved')||l.includes('amendment'))return'sg';return'sb'}}
+function render(ns){{
+  try{{const d=new Date(DATA.lastUpdated);document.getElementById('last-updated').textContent='Updated '+d.toLocaleString('en-GB',{{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}})}}catch(e){{}}
+  const wc=DATA.weather.current;
+  document.getElementById('weather-card').innerHTML=`<div class="weather-now"><div class="weather-icon-big">${{wc.icon}}</div><div><div class="weather-temp">${{wc.temp}}<sup>&deg;C</sup></div><div class="weather-label">${{wc.desc}}</div><div class="weather-detail">${{wc.wind}} &middot; Feels like ${{wc.feelsLike}}&deg;C &middot; ${{wc.humidity}}% humidity</div></div></div><div class="weather-forecast">${{DATA.weather.forecast.map(f=>`<div class="fc-day"><div class="fc-name">${{f.day}}</div><div class="fc-ico">${{f.icon}}</div><div class="fc-temps"><span class="fc-hi">${{f.high}}&deg;</span><span class="fc-lo"> / ${{f.low}}&deg;</span></div>${{f.rain>10?`<div class="fc-rain">&#128167; ${{f.rain}}%</div>`:''}}</div>`).join('')}}</div>`;
+  document.getElementById('homes-count').textContent=`&middot; ${{DATA.properties.length}} listed`;
+  document.getElementById('properties-list').innerHTML=DATA.properties.map(p=>`<a href="${{p.url}}" target="_blank" rel="noopener" class="row-item"><div class="row-main"><div class="row-primary">${{p.address}}</div><div class="row-secondary">${{p.beds}} bed &middot; ${{p.type}}</div></div>${{ns.has(p.id)?'<span class="new-badge">New</span>':''}}<div class="prop-price">${{p.price}}</div></a>`).join('');
+  document.getElementById('planning-count').textContent=`&middot; ${{DATA.planning.length}} applications`;
+  document.getElementById('planning-list').innerHTML=DATA.planning.map(p=>`<a href="${{p.url}}" target="_blank" rel="noopener" class="row-item"><div class="row-main"><div class="row-primary">${{p.address}}</div><div class="row-secondary">${{p.received}}</div></div>${{ns.has(p.id)?'<span class="new-badge">New</span>':''}}<span class="status ${{stClass(p.status)}}">${{p.status}}</span></a>`).join('');
+  document.getElementById('news-grid').innerHTML=DATA.news.map(n=>`<a href="${{n.url}}" target="_blank" rel="noopener" class="news-card"><div class="news-date">${{n.date}}${{ns.has(n.id)?' <span class="new-badge">New</span>':''}}</div><div class="news-title">${{n.title}}</div><div class="news-body">${{n.body}}</div></a>`).join('');
+  document.getElementById('pubs-grid').innerHTML=DATA.pubs.map(p=>`<div class="pub-card" style="border-left-color:${{p.color}}"><div class="pub-name">${{p.name}}</div><div class="pub-desc">${{p.desc}}</div><div class="pub-links">${{p.web?`<a href="${{p.web}}" target="_blank" rel="noopener" class="pub-link">Website</a>`:''}}${{p.fb?`<a href="${{p.fb}}" target="_blank" rel="noopener" class="pub-link">Facebook</a>`:''}}${{p.ig?`<a href="${{p.ig}}" target="_blank" rel="noopener" class="pub-link">Instagram</a>`:''}}</div></div>`).join('');
+}}
+function applyTheme(t){{document.documentElement.setAttribute('data-theme',t);document.getElementById('theme-btn').textContent=t==='dark'?'&#9728; Light':'&#9790; Dark'}}
+function toggleTheme(){{const n=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';applyTheme(n);try{{localStorage.setItem('napton_theme',n)}}catch(e){{}}}}
+function initTheme(){{let s=null;try{{s=localStorage.getItem('napton_theme')}}catch(e){{}}if(s==='dark'||s==='light')applyTheme(s)}}
+initTheme();render(initNewItems());
+</script>
+</body>
+</html>"""
+ 
+# ── MAIN ─────────────────────────────────────────────────────────
+def main():
+    cache = load_cache()
+    now   = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+    data  = {"lastUpdated": now, "pubs": PUBS}
+ 
+    for key, fetcher, label in [
+        ("weather",    get_weather,    "weather"),
+        ("properties", get_properties, "properties"),
+        ("planning",   get_planning,   "planning"),
+        ("news",       get_news,       "parish news"),
+    ]:
+        try:
+            result = fetcher()
+            if result:
+                data[key] = result
+                print(f"✓ {label}")
+            else:
+                raise ValueError("empty result")
+        except Exception as e:
+            print(f"✗ {label}: {e} — using cache")
+            if key in cache:
+                data[key] = cache[key]
+            elif key == "weather":
+                data[key] = {"current":{"temp":14,"feelsLike":13,"desc":"—","wind":"—","humidity":0,"icon":"—"},"forecast":[]}
+            elif key in ("properties","planning","news"):
+                data[key] = []
+ 
+    save_cache({k: v for k, v in data.items() if k != "lastUpdated"})
+ 
+    html = generate_html(data)
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"✓ index.html written ({len(html):,} bytes)")
+ 
+if __name__ == "__main__":
+    main()
