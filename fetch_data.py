@@ -92,41 +92,54 @@ def get_weather():
 # ── PROPERTIES ───────────────────────────────────────────────────
 def get_properties():
     from bs4 import BeautifulSoup
-    html  = fetch("https://www.rightmove.co.uk/property-for-sale/Napton.html")
+    html  = fetch("https://www.zoopla.co.uk/for-sale/property/napton/")
     soup  = BeautifulSoup(html, "html.parser")
     props = []
  
-    for card in soup.select('[data-test="propertyCard"], .l-searchResult'):
-        try:
-            addr  = (card.select_one('[data-test="address"]') or
-                     card.select_one('.propertyCard-address'))
-            price = (card.select_one('[data-test="price"]') or
-                     card.select_one('.propertyCard-priceValue'))
-            link  = card.select_one('a[href*="/properties/"]')
-            if not (addr and price and link): continue
+    # Zoopla listing cards
+    cards = (soup.select('[data-testid="regular-listings"] article') or
+             soup.select('article[data-listing-id]') or
+             soup.select('.e2uk8e3') or
+             soup.select('[class*="listing-results"] li'))
  
-            href   = link["href"]
-            pid    = re.search(r"/properties/(\d+)", href)
+    for card in cards:
+        try:
+            link = card.select_one('a[href*="/for-sale/details/"]')
+            if not link: continue
+            href = link["href"]
+            pid  = re.search(r"/details/(\d+)", href)
             if not pid: continue
  
-            beds_el = card.select_one('[data-test="beds"]')
-            beds_n  = int(re.search(r"\d+", beds_el.get_text()).group()) if beds_el else 0
+            addr_el  = (card.select_one('[data-testid="listing-description"]') or
+                        card.select_one('[class*="address"]') or
+                        card.select_one('address') or
+                        card.select_one('h2'))
+            price_el = (card.select_one('[data-testid="listing-price"]') or
+                        card.select_one('[class*="price"]') or
+                        card.select_one('p[class*="Price"]'))
+            if not (addr_el and price_el): continue
+ 
+            text = card.get_text(" ", strip=True)
+            beds_m = re.search(r"(\d+)\s*bed", text, re.I)
+            beds_n = int(beds_m.group(1)) if beds_m else 0
  
             raw_type = ""
-            for t in ["Detached","Semi-Detached","Terraced","Cottage","Flat","Bungalow"]:
-                if t.lower() in html[html.find(href)-200:html.find(href)+500].lower():
+            for t in ["Detached","Semi-detached","Terraced","Cottage","Flat","Bungalow","End of terrace"]:
+                if t.lower() in text.lower():
                     raw_type = t; break
  
-            price_str = price.get_text(strip=True).replace("\xa3","£").replace(",","")
+            price_str = price_el.get_text(strip=True).replace("\xa3","£")
             price_val = int(re.sub(r"[^0-9]","", price_str)) if re.search(r"\d", price_str) else 0
  
+            url = href if href.startswith("http") else f"https://www.zoopla.co.uk{href}"
+ 
             props.append({
-                "id":      f"rm-{pid.group(1)}",
-                "address": addr.get_text(strip=True),
-                "price":   price.get_text(strip=True).replace("\xa3","£"),
+                "id":      f"zp-{pid.group(1)}",
+                "address": addr_el.get_text(strip=True)[:80],
+                "price":   price_str,
                 "beds":    beds_n,
                 "type":    raw_type or "Property",
-                "url":     f"https://www.rightmove.co.uk/properties/{pid.group(1)}",
+                "url":     url,
                 "_sort":   price_val,
             })
         except Exception:
@@ -134,8 +147,9 @@ def get_properties():
  
     if not props:
         return None
-    for p in props: p.pop("_sort", None)
-    return sorted(props, key=lambda p: int(re.sub(r"[^0-9]","",p["price"]) or "0"))
+    props_sorted = sorted(props, key=lambda p: p["_sort"])
+    for p in props_sorted: p.pop("_sort", None)
+    return props_sorted
  
 # ── PLANNING ─────────────────────────────────────────────────────
 STATUS_MAP = [
@@ -334,7 +348,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Outfit',system-ui,sans
     <section class="section" id="homes">
       <div class="section-header">
         <h2 class="section-title">Homes for Sale <span class="section-sub" id="homes-count"></span></h2>
-        <a href="https://www.rightmove.co.uk/property-for-sale/Napton.html" target="_blank" rel="noopener" class="ext-link">Rightmove &rarr;</a>
+        <a href="https://www.zoopla.co.uk/for-sale/property/napton/" target="_blank" rel="noopener" class="ext-link">Zoopla &rarr;</a>
       </div>
       <div class="row-list" id="properties-list"></div>
     </section>
@@ -359,7 +373,7 @@ body{{background:var(--bg);color:var(--text);font-family:'Outfit',system-ui,sans
   </section>
 </main>
 <footer class="site-footer">
-  <span>Sources: <a href="https://www.rightmove.co.uk/property-for-sale/Napton.html" target="_blank" rel="noopener">Rightmove</a> &middot; <a href="https://napton-pc.gov.uk/planning-applications" target="_blank" rel="noopener">Napton Parish Council</a> &middot; <a href="https://wttr.in" target="_blank" rel="noopener">wttr.in</a></span>
+  <span>Sources: <a href="https://www.zoopla.co.uk/for-sale/property/napton/" target="_blank" rel="noopener">Zoopla</a> &middot; <a href="https://napton-pc.gov.uk/planning-applications" target="_blank" rel="noopener">Napton Parish Council</a> &middot; <a href="https://wttr.in" target="_blank" rel="noopener">wttr.in</a></span>
   <span>Refreshed automatically every 3 hours</span>
 </footer>
 <script>
