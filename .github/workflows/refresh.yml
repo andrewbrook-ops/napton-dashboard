@@ -1,0 +1,47 @@
+ame: Refresh Dashboard
+
+on:
+  schedule:
+    # Every 3 hours
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+    # Allows manual trigger from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install beautifulsoup4
+
+      - name: Restore cached data (so fallback works on scrape failures)
+        uses: actions/cache@v4
+        with:
+          path: data_cache.json
+          key: napton-data-cache-${{ github.run_id }}
+          restore-keys: |
+            napton-data-cache-
+
+      - name: Fetch data and generate index.html
+        run: python fetch_data.py
+
+      - name: Commit and push updated site
+        run: |
+          git config user.name  "Napton Bot"
+          git config user.email "bot@napton-dashboard"
+          git add index.html data_cache.json
+          # Only commit if something changed
+          git diff --cached --quiet || git commit -m "Refresh dashboard $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push
