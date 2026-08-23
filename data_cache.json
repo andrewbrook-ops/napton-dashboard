@@ -1,0 +1,72 @@
+{
+  "pubs": [
+    {
+      "name": "The Folly at Napton",
+      "color": "#4A7E99",
+      "desc": "A canalside pub with real fires and a warm welcome. Food served daily, dog-friendly, and views over the Oxford Canal.",
+      "web": "http://follyatnapton.co.uk/",
+      "fb": "https://www.facebook.com/thefollyatnapton/",
+      "ig": "https://www.instagram.com/thefollynapton/"
+    },
+    {
+      "name": "The Kings Head",
+      "color": "#8B6014",
+      "desc": "A Hook Norton house at the heart of the village. Traditional ales, quiz nights, and proper home cooking.",
+      "web": "https://www.thekingsheadnapton.com/",
+      "fb": "https://www.facebook.com/thekingsheadnapton/",
+      "ig": null
+    },
+    {
+      "name": "Napton Cidery",
+      "color": "#568A44",
+      "desc": "Craft cider pressed from Napton's own orchards. Farm shop, tastings, and seasonal events throughout the year.",
+      "web": "https://www.naptoncidery.co.uk/",
+      "fb": "https://www.facebook.com/naptoncidery/",
+      "ig": "https://www.instagram.com/naptoncidery/"
+    },
+    {
+      "name": "The Victory Club",
+      "color": "#8B3030",
+      "desc": "The village social club. Sport on the telly, live events, darts, and a community spirit you can't bottle.",
+      "web": null,
+      "fb": "https://www.facebook.com/napton.victoryclub/",
+      "ig": null
+    }
+  ],
+  "weather": {
+    "current": {
+      "temp": 15,
+      "feelsLike": 14,
+      "desc": "Sunny",
+      "wind": "NNE 4 km/h",
+      "humidity": 60,
+      "icon": "☀️"
+    },
+    "forecast": [
+      {
+        "day": "Sun",
+        "high": 23,
+        "low": 11,
+        "icon": "☀️",
+        "rain": 1
+      },
+      {
+        "day": "Mon",
+        "high": 23,
+        "low": 12,
+        "icon": "☁️",
+        "rain": 10
+      },
+      {
+        "day": "Tue",
+        "high": 23,
+        "low": 13,
+        "icon": "☁️",
+        "rain": 10
+      }
+    ]
+  },
+  "properties": [],
+  "planning": [],
+  "news": []
+}
