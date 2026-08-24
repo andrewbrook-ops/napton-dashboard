@@ -37,8 +37,8 @@
     "current": {
       "temp": 23,
       "feelsLike": 17,
-      "desc": "Cloudy ",
-      "wind": "E 24 km/h",
+      "desc": "Overcast ",
+      "wind": "E 27 km/h",
       "humidity": 32,
       "icon": "☁️"
     },
