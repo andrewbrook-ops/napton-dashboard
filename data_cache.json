@@ -35,17 +35,17 @@
   ],
   "weather": {
     "current": {
-      "temp": 16,
-      "feelsLike": 13,
+      "temp": 20,
+      "feelsLike": 16,
       "desc": "Patchy rain nearby",
-      "wind": "WNW 21 km/h",
-      "humidity": 76,
+      "wind": "WNW 23 km/h",
+      "humidity": 57,
       "icon": "🌦️"
     },
     "forecast": [
       {
         "day": "Mon",
-        "high": 18,
+        "high": 20,
         "low": 12,
         "icon": "🌦️",
         "rain": 26
@@ -55,7 +55,7 @@
         "high": 20,
         "low": 11,
         "icon": "🌦️",
-        "rain": 10
+        "rain": 9
       },
       {
         "day": "Wed",
