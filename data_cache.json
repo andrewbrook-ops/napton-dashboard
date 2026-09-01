@@ -35,12 +35,12 @@
   ],
   "weather": {
     "current": {
-      "temp": 12,
+      "temp": 11,
       "feelsLike": 10,
-      "desc": "Clear ",
+      "desc": "Cloudy ",
       "wind": "WSW 10 km/h",
-      "humidity": 84,
-      "icon": "☀️"
+      "humidity": 86,
+      "icon": "☁️"
     },
     "forecast": [
       {
