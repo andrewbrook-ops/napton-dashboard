@@ -36,10 +36,10 @@
   "weather": {
     "current": {
       "temp": 17,
-      "feelsLike": 14,
+      "feelsLike": 13,
       "desc": "Patchy rain nearby",
-      "wind": "SSW 18 km/h",
-      "humidity": 71,
+      "wind": "SSW 26 km/h",
+      "humidity": 87,
       "icon": "🌦️"
     },
     "forecast": [
