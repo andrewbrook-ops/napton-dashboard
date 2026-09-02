@@ -37,18 +37,18 @@
     "current": {
       "temp": 13,
       "feelsLike": 12,
-      "desc": "Clear ",
-      "wind": "SW 12 km/h",
-      "humidity": 90,
-      "icon": "☀️"
+      "desc": "Mist",
+      "wind": "SW 10 km/h",
+      "humidity": 95,
+      "icon": "🌫️"
     },
     "forecast": [
       {
         "day": "Wed",
-        "high": 20,
+        "high": 18,
         "low": 13,
-        "icon": "☁️",
-        "rain": 17
+        "icon": "🌦️",
+        "rain": 20
       },
       {
         "day": "Thu",
