@@ -35,12 +35,12 @@
   ],
   "weather": {
     "current": {
-      "temp": 19,
-      "feelsLike": 15,
-      "desc": "Sunny",
-      "wind": "W 15 km/h",
+      "temp": 20,
+      "feelsLike": 17,
+      "desc": "Partly Cloudy ",
+      "wind": "WSW 14 km/h",
       "humidity": 44,
-      "icon": "☀️"
+      "icon": "🌤️"
     },
     "forecast": [
       {
@@ -48,12 +48,12 @@
         "high": 21,
         "low": 11,
         "icon": "☀️",
-        "rain": 2
+        "rain": 3
       },
       {
         "day": "Sun",
         "high": 25,
-        "low": 15,
+        "low": 14,
         "icon": "🌤️",
         "rain": 5
       },
