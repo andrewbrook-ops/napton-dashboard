@@ -35,11 +35,11 @@
   ],
   "weather": {
     "current": {
-      "temp": 16,
-      "feelsLike": 13,
-      "desc": "Sunny",
-      "wind": "N 10 km/h",
-      "humidity": 54,
+      "temp": 13,
+      "feelsLike": 11,
+      "desc": "Clear ",
+      "wind": "NNE 4 km/h",
+      "humidity": 70,
       "icon": "☀️"
     },
     "forecast": [
