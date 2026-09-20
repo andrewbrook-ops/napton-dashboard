@@ -39,7 +39,7 @@
       "feelsLike": 10,
       "desc": "Overcast ",
       "wind": "WSW 19 km/h",
-      "humidity": 83,
+      "humidity": 85,
       "icon": "☁️"
     },
     "forecast": [
@@ -47,15 +47,15 @@
         "day": "Sun",
         "high": 18,
         "low": 11,
-        "icon": "🌤️",
-        "rain": 4
+        "icon": "☁️",
+        "rain": 9
       },
       {
         "day": "Mon",
-        "high": 23,
+        "high": 22,
         "low": 10,
         "icon": "☀️",
-        "rain": 1
+        "rain": 2
       },
       {
         "day": "Tue",
