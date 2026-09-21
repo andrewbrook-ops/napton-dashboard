@@ -37,9 +37,9 @@
     "current": {
       "temp": 11,
       "feelsLike": 9,
-      "desc": "Cloudy ",
-      "wind": "NNE 4 km/h",
-      "humidity": 74,
+      "desc": "Overcast ",
+      "wind": "SSW 4 km/h",
+      "humidity": 75,
       "icon": "☁️"
     },
     "forecast": [
@@ -55,14 +55,14 @@
         "high": 23,
         "low": 15,
         "icon": "☀️",
-        "rain": 4
+        "rain": 5
       },
       {
         "day": "Wed",
-        "high": 21,
-        "low": 12,
-        "icon": "🌦️",
-        "rain": 17
+        "high": 19,
+        "low": 10,
+        "icon": "🌨️",
+        "rain": 57
       }
     ]
   },
