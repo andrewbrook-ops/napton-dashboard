@@ -38,8 +38,8 @@
       "temp": 13,
       "feelsLike": 8,
       "desc": "Sunny",
-      "wind": "NW 23 km/h",
-      "humidity": 63,
+      "wind": "NW 22 km/h",
+      "humidity": 54,
       "icon": "☀️"
     },
     "forecast": [
@@ -54,15 +54,15 @@
         "day": "Sat",
         "high": 12,
         "low": 5,
-        "icon": "🌤️",
-        "rain": 5
+        "icon": "☀️",
+        "rain": 2
       },
       {
         "day": "Sun",
         "high": 12,
-        "low": 5,
+        "low": 6,
         "icon": "☁️",
-        "rain": 15
+        "rain": 9
       }
     ]
   },
