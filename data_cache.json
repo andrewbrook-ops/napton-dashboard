@@ -37,10 +37,10 @@
     "current": {
       "temp": 10,
       "feelsLike": 7,
-      "desc": "Overcast ",
-      "wind": "NNE 16 km/h",
+      "desc": "Partly Cloudy ",
+      "wind": "NNE 15 km/h",
       "humidity": 59,
-      "icon": "☁️"
+      "icon": "🌤️"
     },
     "forecast": [
       {
