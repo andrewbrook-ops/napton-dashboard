@@ -35,34 +35,34 @@
   ],
   "weather": {
     "current": {
-      "temp": 10,
-      "feelsLike": 10,
-      "desc": "Mist",
-      "wind": "SSE 5 km/h",
-      "humidity": 95,
-      "icon": "🌫️"
+      "temp": 12,
+      "feelsLike": 11,
+      "desc": "Patchy rain nearby",
+      "wind": "SE 7 km/h",
+      "humidity": 88,
+      "icon": "🌦️"
     },
     "forecast": [
       {
         "day": "Thu",
         "high": 15,
         "low": 9,
-        "icon": "🌤️",
-        "rain": 16
+        "icon": "☁️",
+        "rain": 18
       },
       {
         "day": "Fri",
         "high": 15,
         "low": 8,
         "icon": "🌤️",
-        "rain": 13
+        "rain": 12
       },
       {
         "day": "Sat",
         "high": 15,
-        "low": 8,
-        "icon": "☁️",
-        "rain": 15
+        "low": 7,
+        "icon": "🌤️",
+        "rain": 16
       }
     ]
   },
