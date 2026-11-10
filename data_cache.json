@@ -37,32 +37,32 @@
     "current": {
       "temp": 4,
       "feelsLike": 1,
-      "desc": "Mist",
-      "wind": "E 11 km/h",
-      "humidity": 96,
-      "icon": "🌫️"
+      "desc": "Overcast ",
+      "wind": "ENE 13 km/h",
+      "humidity": 97,
+      "icon": "☁️"
     },
     "forecast": [
       {
-        "day": "Mon",
+        "day": "Tue",
         "high": 10,
         "low": 3,
-        "icon": "🌤️",
-        "rain": 17
-      },
-      {
-        "day": "Tue",
-        "high": 9,
-        "low": 3,
         "icon": "☁️",
-        "rain": 26
+        "rain": 25
       },
       {
         "day": "Wed",
         "high": 10,
-        "low": 5,
-        "icon": "🌦️",
-        "rain": 30
+        "low": 4,
+        "icon": "☁️",
+        "rain": 26
+      },
+      {
+        "day": "Thu",
+        "high": 7,
+        "low": 1,
+        "icon": "☀️",
+        "rain": 4
       }
     ]
   },
