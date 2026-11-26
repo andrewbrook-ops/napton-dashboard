@@ -38,31 +38,31 @@
       "temp": 3,
       "feelsLike": 0,
       "desc": "Overcast ",
-      "wind": "ENE 12 km/h",
-      "humidity": 84,
+      "wind": "ESE 11 km/h",
+      "humidity": 81,
       "icon": "☁️"
     },
     "forecast": [
       {
         "day": "Thu",
         "high": 4,
-        "low": 2,
+        "low": 1,
         "icon": "☁️",
-        "rain": 23
+        "rain": 19
       },
       {
         "day": "Fri",
-        "high": 4,
-        "low": 1,
+        "high": 5,
+        "low": 2,
         "icon": "🌦️",
         "rain": 59
       },
       {
         "day": "Sat",
-        "high": 10,
-        "low": 4,
-        "icon": "🌨️",
-        "rain": 58
+        "high": 9,
+        "low": 5,
+        "icon": "🌦️",
+        "rain": 72
       }
     ]
   },
